@@ -6,13 +6,13 @@ services:
         build:
             context: node
         container_name: app
+        entrypoint: dockerize -wait tcp://db:3306 -timeout 20s docker-entrypoint.sh
+        command: node index.js
         networks:
             - work
         volumes:
             - ./node:/usr/src/app
         tty: true
-        ports:
-            - "3000:3000"
         depends_on:
             - db
     
@@ -20,7 +20,6 @@ services:
         image: mysql:5.7
         command: --innodb-use-native-aio=0
         container_name: db
-        restart: always
         tty: true
         volumes:
             - ./mysql:/var/lib/mysql
@@ -30,6 +29,17 @@ services:
             - MYSQL_USER=root
         networks:
             - work
+    
+    nginx:
+        build:
+            context: nginx
+        container_name: nginx
+        networks:
+            - work
+        ports:
+            - "8080:80"
+        depends_on:
+            - app
 
 networks:
     work:
