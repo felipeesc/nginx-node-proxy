@@ -1,0 +1,263 @@
+Docker
+
+-> O QUE É?
+  - Containers
+    * são imutáveis
+    * quando um container morre, tudo se perde
+    - NameSpaces { isola processos }
+      - Processo pai
+        - subprocessos (filhos N)
+      - Pid
+      - User
+      - Network
+      - File system
+    - CGroups { Controla os recursos }
+      - Isola os recursos computacionais máquina
+      - Seus processos não influenciam nos outro recursos da máquina
+    - File System { OFS Overlay File System }
+      - Trabalha com camadas
+      - Não precisa de cópias inteiras, apenas as diferenças
+      - O container roda em cima do meu SO, ele só contém os pedaços que precisa para rodar
+  - Imagens
+    - uma Imagem é IMUTÁVEL (estado imutável)
+    - é um conjunto de dependências encadeadas em uma árvore
+    - não precisa ter imagens duplicadas, as camadas de dependências podem ser reutilizadas em outras imagens
+    - ficam dentro de uma Image Registry
+    - push -> vai para o Image Registry
+  - Dockerfile
+    - descreve como a imagem será criada (builder)
+    - FROM (imagem a partir de outra) pull from Image Registry
+    - RUN (comandos)
+    - EXPOSE (expoe as portas ex  8000)
+    - toda vez que o Dockerfile é rodado, uma nova imagem é gerada
+      $ build gera uma nova imagem
+
+  * Há uma camada de Read/Write no comportamento do CONTAINER
+    - será perdido depois que o container for destruído
+    - se dar um commit, uma nova imagem pode ser gerada com essas escritas
+
+-> Como o Docker funciona
+  - Docker Host rodando numa DAEMON - API
+    - Cache (das imagens -> pull e push de Registry)
+    - Volumes (compartilhar uma pasta do meu PC com o container)
+      - Não são perdidos depois que o container são destruídos
+    - Network (se comunica entre outros containers, ex: cont Ruby se comunica com cont Postgresql)
+
+  - Docker Client (é o docker na linha de comando)
+    - Containers
+    - Run, Pull, Push
+    - se comunica com a daemon - api
+
+-> COMANDOS
+  $ docker ps
+    lista os processos
+  $ docker run imagem_name:version_or_tag
+  $ docker run imagem_name #sem a version ele entende: docker run imagem_name:lateste
+    -> baixa a imagem e roda o container
+
+  $ docker ps -a
+    ->lista todos os containers ativos e os que já morreram em algum momento
+
+  $ docker run -it ubuntu bash
+    -> docker run: roda algo
+    -> -it: parâmetro, sempre depois do run. -i -t
+      -> -i: modo interativo, ativo, processo rodando. Attach o bash no nosso terminal. Prende o terminal
+      -> -t: tty: Permite digitar
+    -> ubuntu: imagem, poderia ser imagem:version
+    -> bash: o comando que será rodado no container
+  $ docker run -it --rm ubuntu bash
+    -> remove o container depois de executado.
+    -> não será exibido no ps
+  $ docker run -p 8080:80 nginx
+    -> -p publica a porta 80 do container na porta 8080 da máquina host
+    -> localhost:8080 acesso o nginx por exemplo
+    -> 0.0.0.0:8080->80/tcp
+  $ docker run -d
+    -> -d disattached: deixa o terminal livre
+  $ docker run --name nginxX nginx
+    -> --name: dá o nome nginxX ao container
+
+  $ docker images
+    -> lista as imagens baixadas
+
+  $ docker rmi _nome_imagem_
+    -> exclui a imagem
+  $ docker rm _container_id_ ou _container_name_
+    -> exclui um container através do container ID
+    -> -f força a exclusão
+
+  $ docker exec nome_do_container ls
+    -> exec: executa algo no container
+    -> ls: é o comando, poderia ser install app ...
+    -> o container está rodando
+    -> Quando se acessa um container e altera um arquivo, ou instala algo app (exemplo do h1 e do vim no container nginx)
+        As alterações são feitas no container
+        Depois que o container morrer, as alterações serão perdidas
+        A imagem não é alterada
+        Enquanto o container não for destruído, e for iniciado novamente, as alterações permanecem.
+        Após a exclusão do container, tudo é perdido.
+
+  $ docker start nome_do_container
+    -> inicia um container já criado
+    -> os containers listados no docker ps podem ser iniciados novamente
+  $ docker stop nome_do_container
+    -> stop: para o container
+
+-> PORTAS
+  Publicando portas com nginx {Engine X} Motor X: servidor web
+
+  - sua máquina é o docker host, rodando os processos do docker
+    - o host não está na mesma rede que os containers
+  - o container para ele, ele é uma máquina que está rodando o nginx
+    - ele está com a porta 80 ativa
+  - se o meu container possui portas ativas, não quer dizer que o host irá enxergar a porta do container
+  - se outro container estiver rodando, esse container consegue enxergar essa porta do nginx
+
+-> Bind mounts
+  Um local compartilhado entre o container e a sua máquina. Ambas podem gravar/editar/excluir nesse local
+  e tudo ficara na sua máquina, mesmo que o container seja excluir
+
+  $ docker run -d --name nginxVol -p 8080:80 -v ~/fullcycle/docker/html/:/usr/share/nginx/html nginx
+  -> -v: para criar volume no caminho passado
+  -> caminho: origem:destino
+    -> origem é o caminho na sua máquina
+    -> destino é o caminho na imagem
+    -> com -v, cria a pasta mesmo que ela não exista na sua máquina e/ou na imagem
+  -> posso editar o arquivo no meu computador ou posso editar via bash dentro do container
+
+  $ docker run -d --name nginxBind -p 8080:80 --mount type=bind,source="$(pwd)"/html,target=/usr/share/nginx/html nginx
+  -> --mount: similar ao -v, porém não permite informar uma pasta que não existe
+  -> type=bind
+  -> source: é o caminho de origem (máquina local)
+  -> "$(pwd)": é o caminho em que o comando está sendo executado
+    ❯fullcycle/docker/html
+    $ echo "$(pwd)"
+    /home/lenielson/fullcycle/docker/html"
+  -> target: caminho de destino
+
+-> VOLUMES
+  -> $ docker volume
+  -> $ docker volume create meuvolume
+  -> $ docker volume ls
+  -> docker run -d --name nginx1 -p 8080:80 --mount type=volume,source=meuvolume,target=/app nginx
+    -> o mount é do tipo volume, assim a origem é o volume que foi criado anteriormente e o destino será a pasta app na imagem
+    -> tudo que for colocado na pasta app, será salva no volume, e ficará disponível para todos os outros containers que tiverem
+       o mesmo volume mapeado
+  -> docker run --name nginx4 -p 8080:80 -v meuvolume:/app nginx
+    -> o mesmo que o de cima
+  -> docker volume prune
+    -> apaga todos os volumes
+
+-> IMAGES
+  -> Container Registry é o próprio DockerHub
+  -> Uma imagem é dividida em partes, e se uma dessas partes estiver em outra imagem já baixada, a nova imagem usará a mesma parte
+     Sem duplicação
+     Usa layers
+
+  -> Criando imagem através do Dockerfile
+    -> cria o Dockerfile
+      #sempre partindo de uma imagem base
+      FROM nginx:latest
+
+      RUN apt-get update
+      #-y é respondendo sim para a instalação do vim
+      RUN apt-get install vim -y
+    $ docker build --tag felipeesc91/nginx-com-vim:latest .
+      -> --tag: para colocar o nome (-t)
+      -> usuário no dockerhub/nome-da-imagem:versao
+      -> . na pasta atual
+
+    -> EXEMPLOS Dockerfile
+        #sempre partindo de uma imagem base
+        FROM nginx:latest
+
+        #irá criar a pasta app e ficará posicionado nessa pasta
+        WORKDIR /app
+
+        #&& executa o próximo comando após a conclusão do primeiro comando
+        #\ permite quebrar a linha e continuar na próxima
+        RUN apt-get update && \
+            apt-get install vim -y
+
+        #copia algo do meu computador para dentro do container
+        #copia a pasta html para a pasta nginx
+        COPY html/ /usr/share/nginx/html
+
+    -> COMANDOS E ENTRYPOINTS
+        FROM ubuntu:latest
+
+        #comando fixo
+        ENTRYPOINT [ "echo", "hello" ]
+
+        #comando variável
+        #entra como parâmetro
+        CMD ["world"]
+
+        $docker build --tag felipeesc91/hello:latest .
+        $docker run --rm felipeesc91/hello:latest
+        ❯hello world
+
+        $ docker run --rm felipeesc91/hello:latest param_qualquer
+        hello param_qualquer
+
+    -> dentro do DOCKERFILE
+      ENV variáveis de ambiente
+      EXPOSE expor um porta do container
+      ENTRYPOINT ["/docker-entrypoint.sh"] o entrypoint pode ser um arquivo sh
+      COPY copia da máquina para o container
+
+    -> dentro de um arquivo .sh (shell script)
+      se houver o comando $ exec "$@"
+      quer dizer que o meu script executará os comandos passados na execução do meu script sh
+
+    -> Publicando uma imagem
+      -> dockerfile
+        #sempre partindo de uma imagem base
+        FROM nginx:latest
+
+        #copia algo do meu computador para dentro do container
+        #copia a pasta html para a pasta nginx
+        COPY html/ /usr/share/nginx/html
+
+        ENTRYPOINT [ "/docker-entrypoint.sh" ]
+        CMD ["nginx", "-g", "daemon off;"]
+
+      -> build da imagem
+        $ docker build --tag felipeesc91/nginx-fullcycle
+      -> testa a imagem
+        $ docker run --rm -d -p 8080:80 felipeesc91/nginx-fullcycle
+      -> login no dockerhub
+        $ docker login
+      -> envio
+        $ docker push felipeesc91/nginx-fullcycle
+
+-> NETWORK
+  -> Tipos
+    -> bridge: o mais comum, a rede do tipo bridge utilizada para que um container se comunique facilmente com outro container
+    -> host: esse formato de network, ele mescla a network do docker com a network do host
+    -> overlay: não é muito comum, entre dockers em máquinas diferentes
+    -> none: meu container não vai ter rede, vai ficar isolado
+    -> maclan
+
+  $ docker network ls
+  $ docker network create --driver bridge minharede
+    -> cria uma rede
+  $ docker run -dit --name ubuntu1 --network minharede bash
+    usando a rede
+  $ docker exec -it ubuntu1 bash
+    $ bash-5.1# ping ubuntu2
+    -> com os dois containers de pé e na mesma rede, eles conseguem se enxergar pelo nome
+    -> se a rede não tivesse sido definida, estariam por default na rede bridge, e se enxergariam apenas pelo ip
+  $ docker network connect minharede ubuntu3
+    -> adicionando um container em uma rede
+  $ docker network inspect minharede
+    -> mostra todos os containers dessa rede e quais os seus ips
+  $ docker run --rm -d --network host felipeesc91/nginx-fullcycle
+    -> com a network host, não foi preciso declarar a porta, pois assim conseguimos acessar a porta 80 do container no localhost,
+       pois estão na mesma rede
+  -> do container acessar uma aplicação no host
+    -> app host localhost:8000 por exemplo
+    -> no container
+      $ http://host.docker.internal:8000 acessa a aplicação que está na máquina host
+
+-> Otimização utilizando Multistage Building
